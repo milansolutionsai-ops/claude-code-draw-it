@@ -1,0 +1,14 @@
+<!doctype html>
+<form id="signup">
+  <input type="email" name="email" required placeholder="you@example.com">
+  <button>Join the waitlist</button>
+</form>
+<p id="msg"></p>
+<script>
+  document.getElementById("signup").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const email = new FormData(e.target).get("email");
+    const res = await fetch("/api/signup", { method: "POST", body: JSON.stringify({ email }) });
+    document.getElementById("msg").textContent = res.ok ? "Check your inbox to confirm." : "Something went wrong.";
+  });
+</script>

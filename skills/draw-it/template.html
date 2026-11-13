@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__TITLE__</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Patrick+Hand&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/roughjs@4.6.6/bundled/rough.js"></script>
+<style>
+  :root { --ink:#1f1f1f; --red:#c0392b; --blue:#1f5fa8; --orange:#cf6f12; --muted:#555555; --paper:#ffffff; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--paper); color:var(--ink); font-family:"Patrick Hand", "Comic Sans MS", cursive; }
+  main { max-width:1500px; margin:0 auto; padding:24px 16px 48px; }
+  h1 { font-family:"Caveat", cursive; font-size:44px; margin:0; line-height:1.05; }
+  .sub { color:var(--muted); font-size:20px; margin:6px 0 4px; }
+  .who { display:inline-block; font-size:15px; border:1.5px solid var(--ink); border-radius:999px; padding:2px 12px; margin-top:6px; }
+  .wrap { overflow-x:auto; margin:18px 0 8px; }
+  svg { display:block; }
+  .cols { display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:24px; margin-top:12px; }
+  h2 { font-family:"Caveat", cursive; font-size:32px; margin:8px 0 6px; }
+  ol, ul { margin:0; padding-left:26px; font-size:19px; line-height:1.4; }
+  li { margin:0 0 8px; }
+  .n { font-family:"Caveat", cursive; font-weight:700; font-size:22px; }
+  .legend { font-size:16px; color:var(--muted); margin-top:4px; }
+  .legend b.cost { color:var(--orange); } .legend b.warn { color:var(--red); }
+</style>
+</head>
+<body>
+<main>
+  <h1 id="title"></h1>
+  <div class="sub" id="subtitle"></div>
+  <span class="who" id="who"></span>
+  <div class="wrap"><svg id="d" xmlns="http://www.w3.org/2000/svg"></svg></div>
+  <div class="legend">Numbers on the arrows follow the order things happen. <b class="cost">Orange</b> = costs money per run. <b class="warn">Red</b> = where it breaks or surprises you. Dashed arrow = only sometimes.</div>
+  <div class="cols">
+    <section><h2>What happens, in order</h2><ol id="steps"></ol></section>
+    <section><h2 id="tkTitle">Worth knowing</h2><ul id="takeaways"></ul></section>
+  </div>
+</main>
+<script type="application/json" id="data">__DATA__</script>
+<script>
+const D = JSON.parse(document.getElementById("data").textContent);
+const C = { ink:"#1f1f1f", red:"#c0392b", blue:"#1f5fa8", orange:"#cf6f12", muted:"#555555", lane:"#f4f1ea" };
+const LANE_W = 270, NODE_W = 220, ROW_H = 165, TOP = 70, PAD = 20;
+const svg = document.getElementById("d");
+const NS = "http://www.w3.org/2000/svg";
+
+document.getElementById("title").textContent = D.title;
+document.getElementById("subtitle").textContent = D.subtitle || "";
+document.getElementById("who").textContent = D.audienceLabel || (D.audience === "team" ? "For the team" : "For the builder");
+if (D.takeawaysTitle) document.getElementById("tkTitle").textContent = D.takeawaysTitle;
+
+// rough.js gives the hand-drawn look; plain SVG if the CDN is unreachable
+const rc = window.rough ? rough.svg(svg) : null;
+const opts = (o) => Object.assign({ roughness: 1.4, bowing: 1.2, stroke: C.ink, strokeWidth: 1.6 }, o);
+function add(el) { svg.appendChild(el); return el; }
+function plain(tag, attrs) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; }
+function rect(x, y, w, h, o) {
+  if (rc) return add(rc.rectangle(x, y, w, h, opts(o)));
+  return add(plain("rect", { x, y, width: w, height: h, rx: 8, fill: o.fill || "none", stroke: o.stroke || C.ink, "stroke-width": 1.6, "stroke-dasharray": o.strokeLineDash ? o.strokeLineDash.join(" ") : "" }));
+}
+function line(x1, y1, x2, y2, o) {
+  if (rc) return add(rc.line(x1, y1, x2, y2, opts(o)));
+  return add(plain("line", { x1, y1, x2, y2, stroke: o.stroke || C.ink, "stroke-width": 1.6, "stroke-dasharray": o.strokeLineDash ? o.strokeLineDash.join(" ") : "" }));
+}
+function circle(cx, cy, d, o) {
+  if (rc) return add(rc.circle(cx, cy, d, opts(o)));
+  return add(plain("circle", { cx, cy, r: d / 2, fill: o.fill || "none", stroke: o.stroke || C.ink, "stroke-width": 1.6 }));
+}
+function text(x, y, str, o = {}) {
+  const t = plain("text", { x, y, "font-family": o.font || "Patrick Hand, cursive", "font-size": o.size || 18, fill: o.color || C.ink, "text-anchor": o.anchor || "middle", "font-weight": o.weight || 400 });
+  t.textContent = str; return add(t);
+}
+function wrap(str, max) {
+  const out = []; let cur = "";
+  for (const w of String(str || "").split(/\s+/)) { if ((cur + " " + w).trim().length > max) { if (cur) out.push(cur); cur = w; } else cur = (cur + " " + w).trim(); }
+  if (cur) out.push(cur); return out;
+}
+
+// layout: lanes are columns, node.row is the vertical slot inside its lane
+const lanes = D.lanes, laneIdx = Object.fromEntries(lanes.map((l, i) => [l.id, i]));
+const maxRow = Math.max(...D.nodes.map(n => n.row));
+const W = PAD * 2 + lanes.length * LANE_W, H = TOP + (maxRow + 1) * ROW_H + PAD;
+svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("width", W); svg.setAttribute("height", H);
+
+lanes.forEach((l, i) => {
+  const x = PAD + i * LANE_W + 6;
+  rect(x, 8, LANE_W - 12, H - 16, { fill: C.lane, fillStyle: "solid", stroke: "#d8d2c4", strokeWidth: 1, roughness: 0.8 });
+  text(x + (LANE_W - 12) / 2, 38, l.label, { font: "Caveat, cursive", size: 30, weight: 700 });
+  if (l.sub) text(x + (LANE_W - 12) / 2, 58, l.sub, { size: 15, color: C.muted });
+});
+
+const box = {};
+D.nodes.forEach(n => {
+  const lines = wrap(n.label, 22), det = wrap(n.detail, 30), note = wrap(n.note, 30);
+  const h = 22 + lines.length * 22 + det.length * 18 + (note.length ? note.length * 18 + 6 : 0);
+  const x = PAD + laneIdx[n.lane] * LANE_W + (LANE_W - NODE_W) / 2;
+  const y = TOP + n.row * ROW_H + (ROW_H - h) / 2 - 10;
+  const stroke = n.tone === "cost" ? C.orange : n.tone === "warn" ? C.red : C.ink;
+  rect(x, y, NODE_W, h, { fill: "#ffffff", fillStyle: "solid", stroke, strokeWidth: n.tone ? 2.2 : 1.6 });
+  let ty = y + 26;
+  lines.forEach(s => { text(x + NODE_W / 2, ty, s, { size: 20, weight: 700 }); ty += 22; });
+  det.forEach(s => { text(x + NODE_W / 2, ty, s, { size: 15, color: C.blue }); ty += 18; });
+  if (note.length) { ty += 4; note.forEach(s => { text(x + NODE_W / 2, ty, s, { size: 15, color: C.red }); ty += 18; }); }
+  box[n.id] = { x, y, w: NODE_W, h, cx: x + NODE_W / 2, cy: y + h / 2 };
+});
+
+// edge point where the line from a's centre towards b leaves a's box
+function exitPoint(a, b) {
+  const dx = b.cx - a.cx, dy = b.cy - a.cy;
+  const sx = dx === 0 ? Infinity : (a.w / 2 + 6) / Math.abs(dx), sy = dy === 0 ? Infinity : (a.h / 2 + 6) / Math.abs(dy);
+  const s = Math.min(sx, sy); return { x: a.cx + dx * s, y: a.cy + dy * s };
+}
+D.steps.forEach((st, i) => {
+  const a = box[st.from], b = box[st.to]; if (!a || !b) return;
+  const p1 = exitPoint(a, b), p2 = exitPoint(b, a);
+  const color = st.tone === "cost" ? C.orange : st.tone === "warn" ? C.red : C.ink;
+  const o = { stroke: color, strokeWidth: 1.8 }; if (st.dashed) o.strokeLineDash = [7, 6];
+  line(p1.x, p1.y, p2.x, p2.y, o);
+  const ang = Math.atan2(p2.y - p1.y, p2.x - p1.x), L = 13;
+  line(p2.x, p2.y, p2.x - L * Math.cos(ang - 0.45), p2.y - L * Math.sin(ang - 0.45), { stroke: color, strokeWidth: 1.8 });
+  line(p2.x, p2.y, p2.x - L * Math.cos(ang + 0.45), p2.y - L * Math.sin(ang + 0.45), { stroke: color, strokeWidth: 1.8 });
+  const t = st.at ?? 0.5, mx = p1.x + (p2.x - p1.x) * t, my = p1.y + (p2.y - p1.y) * t;
+  circle(mx, my, 28, { fill: "#fff", fillStyle: "solid", stroke: color, roughness: 0.9 });
+  text(mx, my + 7, String(i + 1), { font: "Caveat, cursive", size: 22, weight: 700, color });
+});
+
+const ol = document.getElementById("steps");
+D.steps.forEach(st => { const li = document.createElement("li"); li.textContent = st.text; ol.appendChild(li); });
+const ul = document.getElementById("takeaways");
+(D.takeaways || []).forEach(s => { const li = document.createElement("li"); li.textContent = s; ul.appendChild(li); });
+</script>
+</body>
+</html>

@@ -1,0 +1,1 @@
+{ "crons": [{ "path": "jobs/weekly-digest.js", "schedule": "0 9 * * 1" }] }

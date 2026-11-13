@@ -1,0 +1,42 @@
+{
+  "title": "How a waitlist signup becomes a weekly email",
+  "subtitle": "tiny-waitlist-app, from the signup form to the Monday digest",
+  "audience": "me",
+  "lanes": [
+    {"id": "browser", "label": "Browser", "sub": "the visitor's tab"},
+    {"id": "server", "label": "App server", "sub": "API routes, one run per request"},
+    {"id": "db", "label": "Database", "sub": "Postgres tables"},
+    {"id": "jobs", "label": "Scheduled jobs", "sub": "runs by itself"},
+    {"id": "out", "label": "Outside services", "sub": "paid, billed per use"}
+  ],
+  "nodes": [
+    {"id": "form", "lane": "browser", "row": 0, "label": "Signup form", "detail": "web/signup.html"},
+    {"id": "click", "lane": "browser", "row": 1, "label": "Confirm link", "detail": "opened from the visitor's inbox"},
+    {"id": "signup", "lane": "server", "row": 0, "label": "/api/signup", "detail": "runs on each form submit", "note": "skips emails already on the list"},
+    {"id": "confirm", "lane": "server", "row": 2, "label": "/api/confirm", "detail": "runs when the link is clicked"},
+    {"id": "subs", "lane": "db", "row": 2, "label": "subscribers", "detail": "status: pending, then confirmed"},
+    {"id": "posts", "lane": "db", "row": 3, "label": "posts", "detail": "last 7 days are read"},
+    {"id": "cron", "lane": "jobs", "row": 3, "label": "Weekly digest", "detail": "cron, Mondays 09:00", "note": "off unless DIGEST_ENABLED=true", "tone": "warn"},
+    {"id": "mail", "lane": "out", "row": 0, "label": "Email provider", "detail": "sends confirm + digest emails", "tone": "cost"},
+    {"id": "llm", "lane": "out", "row": 2, "label": "AI model", "detail": "writes the digest", "tone": "cost"}
+  ],
+  "steps": [
+    {"from": "form", "to": "signup", "text": "The visitor types an email and hits Join. The browser sends it to /api/signup."},
+    {"from": "signup", "to": "subs", "text": "The server saves the email as 'pending' with a one-time token. If the email is already there, it stops here."},
+    {"from": "signup", "to": "mail", "text": "The server asks the email provider to send a confirm link. If that fails it is only logged, so the visitor waits for an email that never comes.", "tone": "warn", "at": 0.35},
+    {"from": "mail", "to": "click", "text": "The visitor clicks the link in their inbox. Only some people do.", "dashed": true, "at": 0.3},
+    {"from": "click", "to": "confirm", "text": "The link opens /api/confirm with the token."},
+    {"from": "confirm", "to": "subs", "text": "The row flips from 'pending' to 'confirmed'."},
+    {"from": "cron", "to": "posts", "text": "Every Monday at 09:00 the job reads the last 7 days of posts. No posts means no email that week."},
+    {"from": "cron", "to": "llm", "text": "One model call turns those posts into a short digest.", "tone": "cost"},
+    {"from": "cron", "to": "subs", "text": "The job loads every confirmed subscriber."},
+    {"from": "cron", "to": "mail", "text": "It sends the digest to each one: one paid email per person.", "tone": "cost", "at": 0.6}
+  ],
+  "takeawaysTitle": "If it breaks, look here",
+  "takeaways": [
+    "Nobody got a confirm email? Check the server log for 'confirm email failed'. The signup still looks fine to the visitor.",
+    "No digest on Monday? First check DIGEST_ENABLED, then whether any posts were written that week.",
+    "Costs grow with the list: one model call a week, but one paid email per confirmed person.",
+    "Pending rows never expire: no code in this app cleans them up."
+  ]
+}
